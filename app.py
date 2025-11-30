@@ -1,10 +1,12 @@
 import streamlit as st
 import os
+
+# --- PAGE CONFIG MUST BE FIRST ---
+st.set_page_config(page_title="Naija Legal Aid", layout="mobile")
+
+# Internal Modules (Import after page config to be safe)
 from legal_agent_core import LegalAgent
 from doc_generator import LegalDocBuilder
-
-# Page Config
-st.set_page_config(page_title="Naija Legal Aid", layout="mobile")
 
 # Secure Init
 def get_keys():
