@@ -16,7 +16,8 @@ class LegalAgent:
             raise ValueError("API Keys for Gemini and YarnGPT are required.")
         
         genai.configure(api_key=gemini_key)
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
+        # Updated to Gemini 2.5 Flash Preview
+        self.model = genai.GenerativeModel('gemini-2.5-flash-preview-09-2025')
         self.yarngpt_key = yarngpt_key
         # Note: Verify this endpoint in your YarnGPT dashboard documentation
         self.yarngpt_url = "https://api.yarngpt.ai/v1/synthesize" 
