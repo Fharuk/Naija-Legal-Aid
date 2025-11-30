@@ -10,25 +10,36 @@ from doc_generator import LegalDocBuilder
 
 # --- SECURE INIT ---
 def get_keys():
-    """
-    Retrieves keys from Environment (Codespaces) or Secrets (Streamlit Cloud).
-    """
     gemini = os.environ.get("GEMINI_API_KEY")
-    yarngpt = os.environ.get("YARNGPT_API_KEY")
+    # YarnGPT key is optional/unused for now
     
-    # Check Streamlit Secrets if env vars are missing
     if not gemini and "GEMINI_API_KEY" in st.secrets:
         gemini = st.secrets["GEMINI_API_KEY"]
-    if not yarngpt and "YARNGPT_API_KEY" in st.secrets:
-        yarngpt = st.secrets["YARNGPT_API_KEY"]
         
-    return gemini, yarngpt
+    return gemini
 
-gemini_key, yarngpt_key = get_keys()
+gemini_key = get_keys()
 
-# --- UI HEADER ---
+# --- SESSION STATE ---
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "jurisdiction" not in st.session_state:
+    st.session_state.jurisdiction = "Lagos"
+
+# UI Header
 st.title("⚖️ Naija Legal Aid")
 st.markdown("**Your Voice-First Legal Assistant**")
+
+# --- 1. DISCLAIMER (Legal Safety) ---
+with st.expander("🚨 IMPORTANT DISCLAIMER - READ BEFORE USE", expanded=True):
+    st.error("""
+    **THIS IS NOT A LAWYER.** This AI tool provides **legal information**, NOT legal advice. 
+    It is based on Nigerian statutes but may hallucinate or be outdated.
+    
+    * Do not rely on this for court cases.
+    * Always consult a qualified Barrister for critical issues.
+    * By using this tool, you accept that the developers are not liable for any actions taken.
+    """)
 
 # Check for Keys
 if not gemini_key:
@@ -38,56 +49,93 @@ if not gemini_key:
 
 # Initialize Agent
 try:
-    # Pass both keys. If yarngpt_key is None, it defaults to gTTS.
-    agent = LegalAgent(gemini_key, yarngpt_key)
+    agent = LegalAgent(gemini_key, None)
 except Exception as e:
     st.error(f"Failed to initialize Agent: {e}")
     st.stop()
 
-# --- INPUT SECTION ---
-st.info("Wetin dey happen? Tell me make we solve am.")
-user_input = st.text_area("Describe your issue (e.g. Landlord wahala):", height=100)
+# --- 2. JURISDICTION SELECTOR (Context) ---
+st.sidebar.header("Settings")
+jurisdiction = st.sidebar.selectbox(
+    "Select Your Location (State)",
+    ["Lagos", "Abuja (FCT)", "Kano", "Rivers", "Oyo", "General (Federal Law)"],
+    index=0,
+    help="Laws vary by state (e.g., Tenancy Law). Selecting the right state improves accuracy."
+)
+st.session_state.jurisdiction = jurisdiction
 
-if st.button("Get Advice"):
-    if user_input:
-        with st.spinner("Consulting the Constitution..."):
-            # 1. AI Analysis
-            analysis = agent.analyze_case(user_input)
+# --- 3. CHAT HISTORY (UX) ---
+
+# Display chat messages from history on app rerun
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+        # If the message has audio or file attachments, display them
+        if "audio_path" in message:
+            st.audio(message["audio_path"], format="audio/mp3")
+        if "doc_data" in message:
+            st.download_button(
+                label="📄 Download Formal Letter",
+                data=message["doc_data"],
+                file_name="legal_letter.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                key=f"dl_{message['id']}" # Unique key for each button
+            )
+
+# React to user input
+if prompt := st.chat_input("Wetin dey happen? (e.g. My landlord lock my shop)"):
+    # Display user message in chat message container
+    st.chat_message("user").markdown(prompt)
+    # Add user message to chat history
+    st.session_state.messages.append({"role": "user", "content": prompt})
+
+    # Generate response
+    with st.spinner(f"Consulting {jurisdiction} Laws..."):
+        # Combine jurisdiction with prompt for context
+        full_context_prompt = f"Jurisdiction: {jurisdiction}. User Query: {prompt}"
+        
+        analysis = agent.analyze_case(full_context_prompt)
+        
+        if "error" in analysis:
+            response_text = f"❌ Error: {analysis['error']}"
+            st.chat_message("assistant").markdown(response_text)
+            st.session_state.messages.append({"role": "assistant", "content": response_text})
+        else:
+            # Construct the response
+            legal_issue = analysis.get('legal_issue', 'Unknown Issue')
+            advice = analysis.get('advice_pidgin', 'No advice generated.')
             
-            if "error" in analysis:
-                st.error(f"Analysis Failed: {analysis['error']}")
-            else:
-                # 2. Display Results
-                st.subheader("Legal Breakdown")
-                st.success(f"**Issue Identified:** {analysis.get('legal_issue')}")
+            response_md = f"**Issue:** {legal_issue}\n\n**Counsel:** {advice}"
+            
+            # Display Assistant Response
+            with st.chat_message("assistant"):
+                st.markdown(response_md)
                 
-                # Pidgin Advice
-                st.markdown("### 🗣️ Counsel (Pidgin)")
-                st.write(f"*{analysis.get('advice_pidgin')}*")
+                # Audio
+                audio_path = agent.synthesize_voice(advice)
+                if audio_path:
+                    st.audio(audio_path, format="audio/mp3", autoplay=True)
                 
-                # 3. Voice Generation (Hybrid)
-                with st.spinner("Generating Voice Note..."):
-                    audio_path = agent.synthesize_voice(analysis.get('advice_pidgin'))
-                    if audio_path:
-                        st.audio(audio_path, format="audio/mp3", autoplay=True)
-                    else:
-                        st.warning("Audio generation failed (Both YarnGPT and gTTS).")
-
-                # 4. Document Generation
-                st.markdown("---")
-                st.subheader("📝 Action Plan")
-                st.write("We have drafted a formal letter for you to print/send.")
-                
-                user_name = st.text_input("Enter your full name for the signature:", "Concerned Citizen")
-                
+                # Document
+                doc_buffer = None
                 if analysis.get('letter_data'):
-                    doc_buffer = LegalDocBuilder.generate_letter(user_name, analysis['letter_data'])
-                    
+                    doc_buffer = LegalDocBuilder.generate_letter("Concerned Citizen", analysis['letter_data'])
                     st.download_button(
-                        label="Download Formal Letter (.docx)",
+                        label="📄 Download Formal Letter",
                         data=doc_buffer,
                         file_name="legal_letter.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     )
-    else:
-        st.warning("Abeg write something first.")
+
+            # Add to History (with attachments)
+            msg_data = {
+                "role": "assistant", 
+                "content": response_md,
+                "id": len(st.session_state.messages)
+            }
+            if audio_path:
+                msg_data["audio_path"] = audio_path
+            if doc_buffer:
+                msg_data["doc_data"] = doc_buffer
+                
+            st.session_state.messages.append(msg_data)
