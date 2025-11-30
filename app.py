@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 
-# --- PAGE CONFIG MUST BE FIRST ---
+# --- PAGE CONFIG ---
 st.set_page_config(page_title="Naija Legal Aid", layout="centered")
 
 # Internal Modules
@@ -11,11 +11,16 @@ from doc_generator import LegalDocBuilder
 # --- SECURE INIT ---
 def get_keys():
     gemini = os.environ.get("GEMINI_API_KEY")
+    yarngpt = os.environ.get("YARNGPT_API_KEY")
+    
     if not gemini and "GEMINI_API_KEY" in st.secrets:
         gemini = st.secrets["GEMINI_API_KEY"]
-    return gemini, None
+    if not yarngpt and "YARNGPT_API_KEY" in st.secrets:
+        yarngpt = st.secrets["YARNGPT_API_KEY"]
+        
+    return gemini, yarngpt
 
-gemini_key, _ = get_keys()
+gemini_key, yarngpt_key = get_keys()
 
 # --- SESSION STATE ---
 if "messages" not in st.session_state:
@@ -43,13 +48,14 @@ if not gemini_key:
     st.error("System Offline. Missing Gemini API Key.")
     st.stop()
 
+# Initialize Agent
 try:
-    agent = LegalAgent(gemini_key, None)
+    agent = LegalAgent(gemini_key, yarngpt_key)
 except Exception as e:
     st.error(f"Failed to initialize Agent: {e}")
     st.stop()
 
-# --- 2. JURISDICTION SELECTOR ---
+# --- 2. SETTINGS & DEBUG SIDEBAR ---
 st.sidebar.header("Settings")
 jurisdiction = st.sidebar.selectbox(
     "Select Your Location (State)",
@@ -57,6 +63,16 @@ jurisdiction = st.sidebar.selectbox(
     index=0
 )
 st.session_state.jurisdiction = jurisdiction
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔌 Connectivity Test")
+if st.sidebar.button("Test YarnGPT Connection"):
+    with st.sidebar.status("Checking YarnGPT..."):
+        status, msg = agent.test_yarngpt_connection()
+        if status:
+            st.sidebar.success(f"Online: {msg}")
+        else:
+            st.sidebar.error(f"Offline: {msg}")
 
 # --- 3. CHAT HISTORY ---
 for message in st.session_state.messages:
@@ -88,10 +104,11 @@ if prompt := st.chat_input("Wetin dey happen? (e.g. My landlord lock my shop)"):
             st.session_state.messages.append({"role": "assistant", "content": response_text})
         else:
             legal_issue = analysis.get('legal_issue', 'Unknown Issue')
-            relevant_law = analysis.get('relevant_law', 'General Legal Principles') # New Field
+            relevant_law = analysis.get('relevant_law', 'General Legal Principles')
             advice = analysis.get('advice_pidgin', 'No advice generated.')
             
-            response_md = f"**Issue:** {legal_issue}\n\n**Citation:** *{relevant_law}*\n\n**Counsel:** {advice}"
+            # Displaying the specific citation as requested
+            response_md = f"**Issue:** {legal_issue}\n\n**⚖️ Citation:** *{relevant_law}*\n\n**Counsel:** {advice}"
             
             with st.chat_message("assistant"):
                 st.markdown(response_md)

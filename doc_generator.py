@@ -1,50 +1,68 @@
 from docx import Document
-from docx.shared import Pt
+from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import io
 import datetime
 
 class LegalDocBuilder:
     """
-    Generates .docx files for legal correspondence locally.
+    Generates professionally formatted .docx files for legal correspondence.
     """
     
     @staticmethod
     def generate_letter(user_name: str, letter_data: dict) -> io.BytesIO:
         doc = Document()
         
-        # Styling
+        # Styles
         style = doc.styles['Normal']
         font = style.font
         font.name = 'Times New Roman'
         font.size = Pt(12)
 
-        # Date
+        # 1. Header (Date)
         today = datetime.date.today().strftime("%B %d, %Y")
         p = doc.add_paragraph(today)
         p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         
-        # Address Block
-        doc.add_paragraph(f"To: {letter_data.get('recipient_type', 'Recipient')}")
+        doc.add_paragraph("") # Spacing
+
+        # 2. Recipient Block
+        recipient = letter_data.get('recipient_type', 'RECIPIENT').upper()
+        doc.add_paragraph(f"TO: THE {recipient}")
         doc.add_paragraph("[Address - Please Fill Manually]")
-        doc.add_paragraph("")
+        doc.add_paragraph("[City, State]")
         
-        # Salutation
+        doc.add_paragraph("") 
+        
+        # 3. Salutation
         doc.add_paragraph("Dear Sir/Madam,")
+        doc.add_paragraph("") 
         
-        # Body
-        doc.add_paragraph(f"SUBJECT: FORMAL NOTICE REGARDING {letter_data.get('recipient_type', 'LEGAL MATTER').upper()}")
+        # 4. Subject Line (Bold & Centered/Uppercase)
+        subject_text = f"FORMAL NOTICE: REGARDING LEGAL RIGHTS AND OBLIGATIONS"
+        p_sub = doc.add_paragraph()
+        run = p_sub.add_run(subject_text)
+        run.bold = True
+        run.underline = True
+        p_sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
+        doc.add_paragraph("") 
+        
+        # 5. Body Text
         body_text = letter_data.get('formal_body', 'Content missing.')
-        doc.add_paragraph(body_text)
+        p_body = doc.add_paragraph(body_text)
+        p_body.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         
-        # Sign-off
+        # 6. Closing Block
+        doc.add_paragraph("")
         doc.add_paragraph("")
         doc.add_paragraph("Yours faithfully,")
         doc.add_paragraph("")
+        doc.add_paragraph("")
+        doc.add_paragraph("__________________________")
         doc.add_paragraph(user_name)
         
-        # Output to memory buffer
+        # Output
         buffer = io.BytesIO()
         doc.save(buffer)
         buffer.seek(0)
