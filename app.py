@@ -1,8 +1,9 @@
 import streamlit as st
 import os
 
-# --- CRITICAL: MUST BE THE FIRST STREAMLIT COMMAND ---
-st.set_page_config(page_title="Naija Legal Aid", layout="mobile")
+# --- PAGE CONFIG ---
+# FIX: layout must be 'centered' or 'wide'. 'mobile' is invalid.
+st.set_page_config(page_title="Naija Legal Aid", layout="centered")
 
 # Internal Modules
 from legal_agent_core import LegalAgent
@@ -10,13 +11,10 @@ from doc_generator import LegalDocBuilder
 
 # --- SECURE INIT ---
 def get_keys():
-    """
-    Retrieves keys from Environment (Codespaces) or Secrets (Streamlit Cloud).
-    """
     gemini = os.environ.get("GEMINI_API_KEY")
     yarngpt = os.environ.get("YARNGPT_API_KEY")
     
-    # Check Streamlit Secrets if env vars are missing
+    # Fallback to Streamlit Secrets
     if not gemini and "GEMINI_API_KEY" in st.secrets:
         gemini = st.secrets["GEMINI_API_KEY"]
     if not yarngpt and "YARNGPT_API_KEY" in st.secrets:
@@ -26,7 +24,7 @@ def get_keys():
 
 gemini_key, yarngpt_key = get_keys()
 
-# --- UI HEADER ---
+# UI Header
 st.title("⚖️ Naija Legal Aid")
 st.markdown("**Your Voice-First Legal Assistant**")
 
