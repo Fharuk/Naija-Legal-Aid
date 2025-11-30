@@ -1,14 +1,14 @@
 import streamlit as st
 import os
 
-# --- PAGE CONFIG ---
+#  PAGE CONFIG 
 st.set_page_config(page_title="Naija Legal Aid", layout="centered")
 
 # Internal Modules
 from legal_agent_core import LegalAgent
 from doc_generator import LegalDocBuilder
 
-# --- SECURE INIT ---
+#  SECURE INIT 
 def get_keys():
     gemini = os.environ.get("GEMINI_API_KEY")
     yarngpt = os.environ.get("YARNGPT_API_KEY")
@@ -22,7 +22,7 @@ def get_keys():
 
 gemini_key, yarngpt_key = get_keys()
 
-# --- SESSION STATE ---
+#  SESSION STATE 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "jurisdiction" not in st.session_state:
@@ -32,7 +32,7 @@ if "jurisdiction" not in st.session_state:
 st.title("⚖️ Naija Legal Aid")
 st.markdown("**Your Voice-First Legal Assistant**")
 
-# --- 1. DISCLAIMER ---
+#  1. DISCLAIMER 
 with st.expander("🚨 IMPORTANT DISCLAIMER - READ BEFORE USE", expanded=True):
     st.error("""
     **THIS IS NOT A LAWYER.** This AI tool provides **legal information**, NOT legal advice. 
@@ -55,7 +55,7 @@ except Exception as e:
     st.error(f"Failed to initialize Agent: {e}")
     st.stop()
 
-# --- 2. SETTINGS & DEBUG SIDEBAR ---
+#  2. SETTINGS & DEBUG SIDEBAR 
 st.sidebar.header("Settings")
 jurisdiction = st.sidebar.selectbox(
     "Select Your Location (State)",
@@ -74,7 +74,7 @@ if st.sidebar.button("Test YarnGPT Connection"):
         else:
             st.sidebar.error(f"Offline: {msg}")
 
-# --- 3. CHAT HISTORY ---
+#  3. CHAT HISTORY 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
