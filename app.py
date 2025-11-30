@@ -1,8 +1,7 @@
 import streamlit as st
 import os
 
-# --- PAGE CONFIG ---
-# FIX: layout must be 'centered' or 'wide'. 'mobile' is invalid.
+# --- PAGE CONFIG MUST BE FIRST ---
 st.set_page_config(page_title="Naija Legal Aid", layout="centered")
 
 # Internal Modules
@@ -11,10 +10,13 @@ from doc_generator import LegalDocBuilder
 
 # --- SECURE INIT ---
 def get_keys():
+    """
+    Retrieves keys from Environment (Codespaces) or Secrets (Streamlit Cloud).
+    """
     gemini = os.environ.get("GEMINI_API_KEY")
     yarngpt = os.environ.get("YARNGPT_API_KEY")
     
-    # Fallback to Streamlit Secrets
+    # Check Streamlit Secrets if env vars are missing
     if not gemini and "GEMINI_API_KEY" in st.secrets:
         gemini = st.secrets["GEMINI_API_KEY"]
     if not yarngpt and "YARNGPT_API_KEY" in st.secrets:
@@ -24,18 +26,19 @@ def get_keys():
 
 gemini_key, yarngpt_key = get_keys()
 
-# UI Header
+# --- UI HEADER ---
 st.title("⚖️ Naija Legal Aid")
 st.markdown("**Your Voice-First Legal Assistant**")
 
 # Check for Keys
-if not gemini_key or not yarngpt_key:
-    st.error("System Offline. Missing API Keys.")
-    st.info("Please set GEMINI_API_KEY and YARNGPT_API_KEY in your environment/secrets.")
+if not gemini_key:
+    st.error("System Offline. Missing Gemini API Key.")
+    st.info("Please set GEMINI_API_KEY in your environment/secrets.")
     st.stop()
 
 # Initialize Agent
 try:
+    # Pass both keys. If yarngpt_key is None, it defaults to gTTS.
     agent = LegalAgent(gemini_key, yarngpt_key)
 except Exception as e:
     st.error(f"Failed to initialize Agent: {e}")
@@ -62,13 +65,13 @@ if st.button("Get Advice"):
                 st.markdown("### 🗣️ Counsel (Pidgin)")
                 st.write(f"*{analysis.get('advice_pidgin')}*")
                 
-                # 3. Voice Generation (YarnGPT)
+                # 3. Voice Generation (Hybrid)
                 with st.spinner("Generating Voice Note..."):
                     audio_path = agent.synthesize_voice(analysis.get('advice_pidgin'))
                     if audio_path:
                         st.audio(audio_path, format="audio/mp3", autoplay=True)
                     else:
-                        st.warning("Audio unavailable. Check YarnGPT quota.")
+                        st.warning("Audio generation failed (Both YarnGPT and gTTS).")
 
                 # 4. Document Generation
                 st.markdown("---")

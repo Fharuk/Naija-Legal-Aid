@@ -4,23 +4,24 @@ import json
 import logging
 import os
 import tempfile
+from gtts import gTTS
 
 logger = logging.getLogger(__name__)
 
 class LegalAgent:
     """
-    Orchestrates Legal Reasoning (Gemini) and Voice Synthesis (YarnGPT).
+    Orchestrates Legal Reasoning (Gemini) and Voice Synthesis (YarnGPT + gTTS Fallback).
     """
-    def __init__(self, gemini_key: str, yarngpt_key: str):
-        if not gemini_key or not yarngpt_key:
-            raise ValueError("API Keys for Gemini and YarnGPT are required.")
+    def __init__(self, gemini_key: str, yarngpt_key: str = None):
+        if not gemini_key:
+            raise ValueError("API Key for Gemini is required.")
         
         genai.configure(api_key=gemini_key)
-        # Updated to Gemini 2.5 Flash Preview
         self.model = genai.GenerativeModel('gemini-2.5-flash-preview-09-2025')
+        
         self.yarngpt_key = yarngpt_key
-        # Note: Verify this endpoint in your YarnGPT dashboard documentation
-        self.yarngpt_url = "https://api.yarngpt.ai/v1/synthesize" 
+        # CORRECTED ENDPOINT from user documentation
+        self.yarngpt_url = "https://yarngpt.ai/api/v1/tts" 
 
     def analyze_case(self, user_input: str):
         """
@@ -50,7 +51,6 @@ class LegalAgent:
         
         try:
             response = self.model.generate_content(prompt)
-            # robust cleanup for markdown formatting
             clean_text = response.text.replace('```json', '').replace('```', '')
             return json.loads(clean_text)
         except Exception as e:
@@ -59,30 +59,48 @@ class LegalAgent:
 
     def synthesize_voice(self, text: str):
         """
-        Converts text to Nigerian-accented speech using YarnGPT.
+        Converts text to speech.
+        Strategy: Try YarnGPT (Nigerian Accent) -> Fail -> Fallback to gTTS.
         """
-        headers = {
-            "Authorization": f"Bearer {self.yarngpt_key}",
-            "Content-Type": "application/json"
-        }
+        audio_path = None
         
-        # Ensure you use a valid voice_id from your YarnGPT account
-        payload = {
-            "text": text,
-            "voice_id": "funke", 
-            "speed": 1.0
-        }
-        
-        try:
-            response = requests.post(self.yarngpt_url, json=payload, headers=headers)
+        # 1. Try YarnGPT
+        if self.yarngpt_key:
+            try:
+                headers = {
+                    "Authorization": f"Bearer {self.yarngpt_key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "text": text,
+                    "voice": "Idera", # Using a valid voice from docs
+                    "response_format": "mp3"
+                }
+                
+                response = requests.post(self.yarngpt_url, json=payload, headers=headers, stream=True)
+                
+                if response.status_code == 200:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            tmp.write(chunk)
+                        audio_path = tmp.name
+                        logger.info("YarnGPT Synthesis Successful")
+                else:
+                    logger.warning(f"YarnGPT Failed ({response.status_code}): {response.text}")
             
-            if response.status_code == 200:
+            except Exception as e:
+                logger.warning(f"YarnGPT Connection Failed: {e}")
+
+        # 2. Fallback to gTTS if YarnGPT failed
+        if not audio_path:
+            logger.info("Falling back to gTTS...")
+            try:
+                tts = gTTS(text=text, lang='en', slow=False)
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-                    tmp.write(response.content)
-                    return tmp.name
-            else:
-                logger.error(f"YarnGPT Error: {response.status_code} - {response.text}")
+                    tts.save(tmp.name)
+                    audio_path = tmp.name
+            except Exception as e:
+                logger.error(f"gTTS Failed: {e}")
                 return None
-        except Exception as e:
-            logger.error(f"Voice Synthesis Failed: {e}")
-            return None
+
+        return audio_path
