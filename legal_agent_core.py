@@ -18,24 +18,22 @@ class LegalAgent:
         genai.configure(api_key=gemini_key)
         self.model = genai.GenerativeModel('gemini-1.5-flash')
         self.yarngpt_key = yarngpt_key
-        # Standard endpoint assumption - Verify against specific YarnGPT docs if 404 occurs
+        # Note: Verify this endpoint in your YarnGPT dashboard documentation
         self.yarngpt_url = "https://api.yarngpt.ai/v1/synthesize" 
 
     def analyze_case(self, user_input: str):
         """
-        1. Analyzes the legal situation using Nigerian Law context.
-        2. Extracts entities for the document.
-        3. Drafts a simplified explanation in Pidgin.
+        Analyzes the legal situation and extracts formal details.
         """
         prompt = f"""
         You are a Nigerian Legal Assistant. The user is facing a legal issue: "{user_input}"
         
-        Context: Apply Nigerian Law (e.g., Lagos Tenancy Law 2011, Police Act 2020).
+        Context: Apply Nigerian Law (e.g., Lagos Tenancy Law 2011, Police Act 2020, Labour Act).
         
         Tasks:
-        1. Identify the legal issue (e.g., Unlawful Eviction, Harassment).
-        2. Draft a short, comforting advice in Nigerian Pidgin English (max 50 words).
-        3. Extract entities for a formal letter: Recipient (Landlord/Police), Address, Date. Use "Unknown" if not provided.
+        1. Identify the specific legal issue.
+        2. Draft a short advice in Nigerian Pidgin English (max 50 words).
+        3. Extract data for a formal letter (Recipient, Address). Use "Unknown" if missing.
         4. Draft the body of a formal legal letter in Standard English.
         
         Output JSON:
@@ -44,14 +42,16 @@ class LegalAgent:
             "advice_pidgin": "string",
             "letter_data": {{
                 "recipient_type": "Landlord/Police/Employer",
-                "formal_body": "string (The main paragraphs of the letter)"
+                "formal_body": "string"
             }}
         }}
         """
         
         try:
             response = self.model.generate_content(prompt)
-            return json.loads(response.text.strip('`json \n'))
+            # robust cleanup for markdown formatting
+            clean_text = response.text.replace('```json', '').replace('```', '')
+            return json.loads(clean_text)
         except Exception as e:
             logger.error(f"Gemini Error: {e}")
             return {"error": str(e)}
@@ -65,9 +65,10 @@ class LegalAgent:
             "Content-Type": "application/json"
         }
         
+        # Ensure you use a valid voice_id from your YarnGPT account
         payload = {
             "text": text,
-            "voice_id": "Mary", 
+            "voice_id": "funke", 
             "speed": 1.0
         }
         
@@ -75,7 +76,6 @@ class LegalAgent:
             response = requests.post(self.yarngpt_url, json=payload, headers=headers)
             
             if response.status_code == 200:
-                # Save audio to temp file
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
                     tmp.write(response.content)
                     return tmp.name
